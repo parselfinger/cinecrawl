@@ -2,10 +2,12 @@ import asyncio
 import json
 
 import scrapers.filmworld as filmworld
+import scrapers.magnificent as magnificent
 from models import CinemaResult
 
 SCRAPERS = [
     ("Filmworld Cinemas", filmworld.scrape),
+    ("Magnificent Cinemas", magnificent.scrape),
 ]
 
 
