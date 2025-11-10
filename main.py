@@ -1,11 +1,11 @@
 import asyncio
 import json
-from typing import List
+
+import scrapers.filmworld as filmworld
 from models import CinemaResult
 
-
-
 SCRAPERS = [
+    ("Filmworld Cinemas", filmworld.scrape),
 ]
 
 
@@ -13,28 +13,16 @@ async def scrape_cinema(name: str, scrape_func) -> CinemaResult:
     """Scrape a single cinema with error handling"""
     try:
         showtimes = await scrape_func()
-        return CinemaResult(
-            cinema=name,
-            success=True,
-            showtimes=showtimes
-        )
+        return CinemaResult(cinema=name, success=True, showtimes=showtimes)
     except Exception as e:
-        return CinemaResult(
-            cinema=name,
-            success=False,
-            showtimes=[],
-            error=str(e)
-        )
+        return CinemaResult(cinema=name, success=False, showtimes=[], error=str(e))
 
 
-async def scrape_all() -> List[CinemaResult]:
+async def scrape_all() -> list[CinemaResult]:
     """Scrape all cinemas concurrently"""
     tasks = [scrape_cinema(name, func) for name, func in SCRAPERS]
     results = await asyncio.gather(*tasks)
     return results
-
-
-
 
 
 async def main():
@@ -46,7 +34,7 @@ async def main():
         if result.success:
             all_showtimes.extend(result.showtimes)
 
-    with open('showtimes.json', 'w') as f:
+    with open("showtimes.json", "w") as f:
         json.dump([vars(s) for s in all_showtimes], f, indent=2)
 
     print("Saved to showtimes.json\n")
