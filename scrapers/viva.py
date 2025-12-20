@@ -2,8 +2,11 @@ import os
 from datetime import datetime, timedelta
 
 import httpx
+from dotenv import load_dotenv
 
 from models import Showtime
+
+load_dotenv()
 
 LOCATIONS = {
     "ikeja": {
