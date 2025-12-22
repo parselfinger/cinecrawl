@@ -1,4 +1,4 @@
-"""Shared utilities for FusionIntel API-based cinema scrapers (Viva, EbonyLife, etc.)"""
+"""Shared utilities for FusionIntel API-based cinema providers."""
 
 from datetime import datetime, timedelta
 
@@ -7,7 +7,7 @@ import httpx
 from models import Showtime
 
 
-async def scrape_fusionintel_api(
+async def fetch_fusionintel_showtimes(
     cinema_name: str,
     location_name: str,
     bearer_token: str,
@@ -15,7 +15,7 @@ async def scrape_fusionintel_api(
     num_days: int = 5,
 ) -> list[Showtime]:
     """
-    Scrape showtimes from FusionIntel API.
+    Fetch showtimes from FusionIntel API.
 
     Args:
         cinema_name: Name of the cinema (e.g., "Viva Cinemas", "EbonyLife Cinemas")

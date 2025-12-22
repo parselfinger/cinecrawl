@@ -1,43 +1,107 @@
 import asyncio
 import json
+from dataclasses import asdict
+from datetime import datetime
 
-import scrapers.filmworld as filmworld
-import scrapers.magnificent as magnificent
+from dotenv import load_dotenv
+
 from models import CinemaResult
+from providers.base import BaseProvider
+from providers.bluepictures import BluePicturesProvider
+from providers.ebonylife import EbonyLifeProvider
+from providers.filmhouse import (
+    FilmHouseCircleMallProvider,
+    FilmHouseIkotaProvider,
+    FilmHouseLandmarkProvider,
+    FilmHouseLekkiIMAXProvider,
+    FilmHouseOniruProvider,
+    FilmHousePalmsLekkiProvider,
+    FilmHouseSurulereProvider,
+)
+from providers.filmworld import FilmworldProvider
+from providers.genesis import (
+    GenesisFestacProvider,
+    GenesisLekkiProvider,
+    GenesisMarylandProvider,
+)
+from providers.grandcinemas import GrandCinemasProvider
+from providers.magnificent import MagnificentProvider
+from providers.ozonecinemas import OzoneCinemasProvider
+from providers.silverbird import SilverbirdGalleriaProvider, SilverbirdIkejaProvider
+from providers.skycinemas import SkyCinemasProvider
+from providers.thccinema import THCCinemaProvider
+from providers.viva import VivaIkejaProvider, VivaLekkiProvider
 
-SCRAPERS = [
-    ("Filmworld Cinemas", filmworld.scrape),
-    ("Magnificent Cinemas", magnificent.scrape),
+# Load environment variables from .env file
+load_dotenv()
+
+
+PROVIDERS: list[BaseProvider] = [
+    # FusionIntel API providers
+    EbonyLifeProvider(),
+    SkyCinemasProvider(),
+    OzoneCinemasProvider(),
+    THCCinemaProvider(),
+    VivaIkejaProvider(),
+    VivaLekkiProvider(),
+    # FilmHouse API providers
+    FilmHouseLandmarkProvider(),
+    FilmHouseLekkiIMAXProvider(),
+    FilmHouseOniruProvider(),
+    FilmHousePalmsLekkiProvider(),
+    FilmHouseSurulereProvider(),
+    FilmHouseCircleMallProvider(),
+    FilmHouseIkotaProvider(),
+    # HTML-based providers
+    BluePicturesProvider(),
+    FilmworldProvider(),
+    GenesisMarylandProvider(),
+    GenesisFestacProvider(),
+    GenesisLekkiProvider(),
+    GrandCinemasProvider(),
+    MagnificentProvider(),
+    SilverbirdIkejaProvider(),
+    SilverbirdGalleriaProvider(),
 ]
 
 
-async def scrape_cinema(name: str, scrape_func) -> CinemaResult:
-    """Scrape a single cinema with error handling"""
+async def fetch_from_provider(provider: BaseProvider) -> CinemaResult:
+    """Fetch showtimes from a provider with error handling"""
     try:
-        showtimes = await scrape_func()
-        return CinemaResult(cinema=name, success=True, showtimes=showtimes)
+        showtimes = await provider.fetch()
+        return CinemaResult(
+            cinema=provider.display_name, success=True, showtimes=showtimes
+        )
     except Exception as e:
-        return CinemaResult(cinema=name, success=False, showtimes=[], error=str(e))
+        return CinemaResult(
+            cinema=provider.display_name, success=False, showtimes=[], error=str(e)
+        )
 
 
-async def scrape_all() -> list[CinemaResult]:
-    """Scrape all cinemas concurrently"""
-    tasks = [scrape_cinema(name, func) for name, func in SCRAPERS]
+async def fetch_all() -> list[CinemaResult]:
+    tasks = [fetch_from_provider(provider) for provider in PROVIDERS]
     results = await asyncio.gather(*tasks)
     return results
 
 
 async def main():
-    """Main entry point"""
-    results = await scrape_all()
+    results = await fetch_all()
 
     all_showtimes = []
     for result in results:
         if result.success:
             all_showtimes.extend(result.showtimes)
+        else:
+            print(f"Error fetching from {result.cinema}: {result.error}")
+
+    def serialize_showtime(showtime):
+        data = asdict(showtime)
+        if isinstance(data.get("date"), datetime):
+            data["date"] = data["date"].isoformat()
+        return data
 
     with open("showtimes.json", "w") as f:
-        json.dump([vars(s) for s in all_showtimes], f, indent=2)
+        json.dump([serialize_showtime(s) for s in all_showtimes], f, indent=2)
 
     print("Saved to showtimes.json\n")
 

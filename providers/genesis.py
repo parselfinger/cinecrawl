@@ -1,27 +1,13 @@
+"""Genesis Deluxe Cinemas providers for all locations."""
+
+from abc import abstractmethod
 from datetime import datetime, timedelta
 
 import httpx
 from bs4 import BeautifulSoup
 
 from models import Showtime
-
-LOCATIONS = {
-    "maryland": {
-        "cinema_id": "7",
-        "cinema_name": "Genesis Deluxe Cinemas",
-        "location": "Maryland Mall, Maryland, Lagos",
-    },
-    "festac": {
-        "cinema_id": "5",
-        "cinema_name": "Genesis Deluxe Cinemas",
-        "location": "Festac Mall, Festac, Lagos",
-    },
-    "lekki": {
-        "cinema_id": "11",
-        "cinema_name": "Genesis Deluxe Cinemas",
-        "location": "Purple Mall, Lekki, Lagos",
-    },
-}
+from providers.base import BaseProvider
 
 
 def _parse_time(time_text: str, date_obj: datetime) -> datetime | None:
@@ -49,25 +35,20 @@ def _parse_time(time_text: str, date_obj: datetime) -> datetime | None:
         return None
 
 
-async def scrape(location: str = "maryland") -> list[Showtime]:
+async def _fetch_genesis_showtimes(
+    cinema_name: str, location_name: str, cinema_id: str
+) -> list[Showtime]:
     """
-    Scrape Genesis Cinemas for a specific location.
+    Fetch Genesis Cinemas showtimes for a specific location.
 
     Args:
-        location: The location to scrape. Must be one of: maryland, festac, lekki.
-                 Defaults to 'maryland'.
+        cinema_name: Name of the cinema
+        location_name: Location description
+        cinema_id: Genesis cinema ID
 
     Returns:
-        List of Showtime objects for the specified location.
+        List of Showtime objects
     """
-    location = location.lower()
-    if location not in LOCATIONS:
-        raise ValueError(
-            f"Unsupported location: {location}. "
-            f"Supported locations: {', '.join(LOCATIONS.keys())}"
-        )
-
-    location_info = LOCATIONS[location]
     url = "https://genesiscinemas.com/wp-admin/admin-ajax.php"
 
     showtimes = []
@@ -82,7 +63,7 @@ async def scrape(location: str = "maryland") -> list[Showtime]:
             "action": "jacro_filter_result",
             "film_date": date_str,
             "film_type": "Now Showing",
-            "cinema_id": location_info["cinema_id"],
+            "cinema_id": cinema_id,
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -139,8 +120,8 @@ async def scrape(location: str = "maryland") -> list[Showtime]:
                         seen.add(key)
                         showtimes.append(
                             Showtime(
-                                cinema=location_info["cinema_name"],
-                                location=location_info["location"],
+                                cinema=cinema_name,
+                                location=location_name,
                                 title=title,
                                 time=time_text,
                                 date=showtime_dt,
@@ -148,3 +129,48 @@ async def scrape(location: str = "maryland") -> list[Showtime]:
                         )
 
     return showtimes
+
+
+class GenesisProvider(BaseProvider):
+    """Base class for all Genesis Deluxe Cinemas providers."""
+
+    @property
+    @abstractmethod
+    def cinema_id(self) -> str:
+        """Genesis cinema ID."""
+        pass
+
+    async def fetch(self) -> list[Showtime]:
+        """Fetch showtimes for this Genesis location."""
+        return await _fetch_genesis_showtimes(
+            cinema_name=self.cinema_name,
+            location_name=self.location,
+            cinema_id=self.cinema_id,
+        )
+
+
+# Concrete providers for each location
+
+
+class GenesisMarylandProvider(GenesisProvider):
+    """Provider for Genesis Deluxe Cinemas Maryland."""
+
+    cinema_name = "Genesis Deluxe Cinemas"
+    location = "Maryland Mall, Maryland, Lagos"
+    cinema_id = "7"
+
+
+class GenesisFestacProvider(GenesisProvider):
+    """Provider for Genesis Deluxe Cinemas Festac."""
+
+    cinema_name = "Genesis Deluxe Cinemas"
+    location = "Festac Mall, Festac, Lagos"
+    cinema_id = "5"
+
+
+class GenesisLekkiProvider(GenesisProvider):
+    """Provider for Genesis Deluxe Cinemas Lekki."""
+
+    cinema_name = "Genesis Deluxe Cinemas"
+    location = "Purple Mall, Lekki, Lagos"
+    cinema_id = "11"

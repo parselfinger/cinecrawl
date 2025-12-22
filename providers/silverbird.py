@@ -1,10 +1,12 @@
 import re
+from abc import abstractmethod
 from datetime import date, datetime, timedelta
 
 import httpx
 from bs4 import BeautifulSoup
 
 from models import Showtime
+from providers.base import BaseProvider
 
 DAY_NAME_TO_INDEX = {
     "MON": 0,
@@ -101,42 +103,21 @@ def _combine_datetime(date_obj: date, time_text: str) -> datetime:
     return datetime.combine(date_obj, parsed_time)
 
 
-LOCATIONS = {
-    "ikeja": {
-        "url_slug": "ikeja",
-        "cinema_name": "Silverbird Ikeja",
-        "location": "Ikeja, Lagos",
-    },
-    "galleria": {
-        "url_slug": "galleria",
-        "cinema_name": "Silverbird Galleria",
-        "location": "Victoria Island, Lagos",
-    },
-}
-
-
-async def scrape(location: str = "ikeja") -> list[Showtime]:
+async def _fetch_silverbird_showtimes(
+    cinema_name: str, location_name: str, url_slug: str
+) -> list[Showtime]:
     """
-    Scrape showtimes for a specific Silverbird cinema location.
+    Fetch Silverbird showtimes for a specific location.
 
     Args:
-        location: The location to scrape. Must be one of: ikeja, galleria.
-                 Defaults to 'ikeja'.
+        cinema_name: Name of the cinema
+        location_name: Location description
+        url_slug: URL slug for this location
 
     Returns:
-        List of Showtime objects for the specified location.
-
-
+        List of Showtime objects
     """
-    location = location.lower()
-    if location not in LOCATIONS:
-        raise ValueError(
-            f"Unsupported location: {location}. "
-            f"Supported locations: {', '.join(LOCATIONS.keys())}"
-        )
-
-    location_info = LOCATIONS[location]
-    url = f"https://silverbirdcinemas.com/cinema/{location_info['url_slug']}/"
+    url = f"https://silverbirdcinemas.com/cinema/{url_slug}/"
 
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
@@ -167,7 +148,6 @@ async def scrape(location: str = "ikeja") -> list[Showtime]:
         showtime_text = showtime_elem.get_text()
 
         # Extract day ranges and their times
-        # Format: "FRI-SUN: times" or "MON-THUR: times"
         parts = showtime_text.split("Showtime:")[-1].strip()
 
         day_patterns = re.findall(
@@ -193,8 +173,8 @@ async def scrape(location: str = "ikeja") -> list[Showtime]:
                     start_at = _combine_datetime(expanded_date, time)
                     showtimes.append(
                         Showtime(
-                            cinema=location_info["cinema_name"],
-                            location=location_info["location"],
+                            cinema=cinema_name,
+                            location=location_name,
                             title=title,
                             time=time,
                             date=start_at,
@@ -202,3 +182,31 @@ async def scrape(location: str = "ikeja") -> list[Showtime]:
                     )
 
     return showtimes
+
+
+class SilverbirdProvider(BaseProvider):
+    """Base class for all Silverbird Cinemas providers."""
+
+    @property
+    @abstractmethod
+    def url_slug(self) -> str:
+        pass
+
+    async def fetch(self) -> list[Showtime]:
+        return await _fetch_silverbird_showtimes(
+            cinema_name=self.cinema_name,
+            location_name=self.location,
+            url_slug=self.url_slug,
+        )
+
+
+class SilverbirdIkejaProvider(SilverbirdProvider):
+    cinema_name = "Silverbird Ikeja"
+    location = "Ikeja, Lagos"
+    url_slug = "ikeja"
+
+
+class SilverbirdGalleriaProvider(SilverbirdProvider):
+    cinema_name = "Silverbird Galleria"
+    location = "Victoria Island, Lagos"
+    url_slug = "galleria"
