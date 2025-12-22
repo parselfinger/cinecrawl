@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 
 from models import Showtime
 from providers.base import BaseProvider
+from retry import async_retry
 
 DAY_NAME_TO_INDEX = {
     "MON": 0,
@@ -103,6 +104,7 @@ def _combine_datetime(date_obj: date, time_text: str) -> datetime:
     return datetime.combine(date_obj, parsed_time)
 
 
+@async_retry(max_attempts=3, backoff_factor=2.0)
 async def _fetch_silverbird_showtimes(
     cinema_name: str, location_name: str, url_slug: str
 ) -> list[Showtime]:

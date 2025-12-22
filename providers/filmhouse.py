@@ -12,10 +12,14 @@ from datetime import datetime, timedelta
 import httpx
 from dotenv import load_dotenv
 
+from exceptions import AuthenticationError
+from logging_config import get_logger
 from models import Showtime
 from providers.base import BaseProvider
+from retry import async_retry
 
 load_dotenv()
+logger = get_logger(__name__)
 
 
 def generate_signature(body_dict: dict, secret_key: str, timestamp: int) -> str:
@@ -72,6 +76,7 @@ class FilmHouseProvider(BaseProvider):
         """FilmHouse API cinema location ID."""
         pass
 
+    @async_retry(max_attempts=3, backoff_factor=2.0)
     async def fetch(self) -> list[Showtime]:
         """
         Fetch showtimes from FilmHouse API.
@@ -80,11 +85,13 @@ class FilmHouseProvider(BaseProvider):
             List of Showtime objects.
 
         Raises:
-            ValueError: If FILMHOUSE_SECRET_KEY environment variable is not set.
+            AuthenticationError: If FILMHOUSE_SECRET_KEY not set.
         """
         secret_key = os.getenv("FILMHOUSE_SECRET_KEY")
         if not secret_key:
-            raise ValueError("FILMHOUSE_SECRET_KEY environment variable not set")
+            raise AuthenticationError(
+                self.display_name, "FILMHOUSE_SECRET_KEY environment variable not set"
+            )
 
         url = "https://filmhouseng.api.cinesync.io/api_v3/cms_widget/index"
 

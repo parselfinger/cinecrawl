@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from models import Showtime
 from providers.base import BaseProvider
+from retry import async_retry
 
 
 class BluePicturesProvider(BaseProvider):
@@ -16,8 +17,8 @@ class BluePicturesProvider(BaseProvider):
     cinema_name = "Blue Pictures Cinemas"
     location = "City Mall, Onikan, Lagos Island"
 
+    @async_retry(max_attempts=3, backoff_factor=2.0)
     async def fetch(self) -> list[Showtime]:
-        """Fetch Blue Pictures Cinemas showtimes."""
         url = "https://bluepicturesng.com/now-showing/"
 
         headers = {

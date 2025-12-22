@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 
 from models import Showtime
 from providers.base import BaseProvider
+from retry import async_retry
 
 DAY_MAP = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
 
@@ -30,6 +31,7 @@ class GrandCinemasProvider(BaseProvider):
     cinema_name = "Grand Cinemas"
     location = "Jabi Lake Mall, Abuja"
 
+    @async_retry(max_attempts=3, backoff_factor=2.0)
     async def fetch(self) -> list[Showtime]:
         """Fetch Grand Cinemas showtimes."""
         url = "https://grandcinemas.com.ng/"

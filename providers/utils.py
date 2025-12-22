@@ -4,9 +4,14 @@ from datetime import datetime, timedelta
 
 import httpx
 
+from logging_config import get_logger
 from models import Showtime
+from retry import async_retry
+
+logger = get_logger(__name__)
 
 
+@async_retry(max_attempts=3, backoff_factor=2.0)
 async def fetch_fusionintel_showtimes(
     cinema_name: str,
     location_name: str,

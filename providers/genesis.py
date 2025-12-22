@@ -6,8 +6,12 @@ from datetime import datetime, timedelta
 import httpx
 from bs4 import BeautifulSoup
 
+from logging_config import get_logger
 from models import Showtime
 from providers.base import BaseProvider
+from retry import async_retry
+
+logger = get_logger(__name__)
 
 
 def _parse_time(time_text: str, date_obj: datetime) -> datetime | None:
@@ -35,6 +39,7 @@ def _parse_time(time_text: str, date_obj: datetime) -> datetime | None:
         return None
 
 
+@async_retry(max_attempts=3, backoff_factor=2.0)
 async def _fetch_genesis_showtimes(
     cinema_name: str, location_name: str, cinema_id: str
 ) -> list[Showtime]:
