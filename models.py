@@ -8,13 +8,11 @@ class Showtime:
     location: str
     title: str
     time: str
-    date: datetime | None = None
+    date: datetime
 
 
 @dataclass
 class CinemaResult:
-    """Result from scraping a cinema"""
-
     cinema: str
     success: bool
     showtimes: list[Showtime]

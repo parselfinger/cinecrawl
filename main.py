@@ -32,6 +32,7 @@ from providers.silverbird import SilverbirdGalleriaProvider, SilverbirdIkejaProv
 from providers.skycinemas import SkyCinemasProvider
 from providers.thccinema import THCCinemaProvider
 from providers.viva import VivaIkejaProvider, VivaLekkiProvider
+from validation import deduplicate_showtimes, validate_showtimes
 
 # Load environment variables from .env file
 load_dotenv()
@@ -109,6 +110,10 @@ async def main():
         if result.success:
             all_showtimes.extend(result.showtimes)
 
+    logger.info(f"Validating {len(all_showtimes)} showtimes")
+    valid_showtimes = validate_showtimes(all_showtimes)
+    unique_showtimes = deduplicate_showtimes(valid_showtimes)
+
     def serialize_showtime(showtime):
         data = asdict(showtime)
         if isinstance(data.get("date"), datetime):
@@ -116,11 +121,11 @@ async def main():
         return data
 
     with open("showtimes.json", "w") as f:
-        json.dump([serialize_showtime(s) for s in all_showtimes], f, indent=2)
+        json.dump([serialize_showtime(s) for s in unique_showtimes], f, indent=2)
 
     logger.info(
         f"Completed: {len(successful)}/{len(PROVIDERS)} providers successful, "
-        f"{len(all_showtimes)} total showtimes"
+        f"{len(unique_showtimes)} valid showtimes (from {len(all_showtimes)} total)"
     )
     logger.info("Saved to showtimes.json")
 
@@ -129,7 +134,7 @@ async def main():
         for result in failed:
             logger.warning(f"  - {result.cinema}")
 
-    return all_showtimes
+    return unique_showtimes
 
 
 if __name__ == "__main__":
