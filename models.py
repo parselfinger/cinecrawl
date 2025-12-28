@@ -9,6 +9,7 @@ class Showtime:
     title: str
     time: str
     date: datetime
+    screen_type: str = "2D"
 
 
 @dataclass

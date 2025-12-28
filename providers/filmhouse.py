@@ -152,6 +152,9 @@ class FilmHouseProvider(BaseProvider):
                     for show_time in show_times:
                         time_slot = show_time.get("show_time_slots")
                         session_date = show_time.get("session_start_date")
+                        theater_experience = show_time.get(
+                            "theater_experience_name", "2D"
+                        )
 
                         if not time_slot or not session_date:
                             continue
@@ -181,6 +184,7 @@ class FilmHouseProvider(BaseProvider):
                                     title=title,
                                     time=time_text,
                                     date=showtime_dt,
+                                    screen_type=theater_experience,
                                 )
                             )
 
