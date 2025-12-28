@@ -15,6 +15,30 @@ class TestValidateShowtime:
         )
         assert validate_showtime(showtime) is True
 
+    def test_valid_showtime_with_screen_type(self):
+        """Test validation of a valid showtime with custom screen_type."""
+        showtime = Showtime(
+            cinema="Test Cinema",
+            location="Test Location",
+            title="Test Movie",
+            time="19:00",
+            date=datetime.now() + timedelta(days=1),
+            screen_type="IMAX",
+        )
+        assert validate_showtime(showtime) is True
+        assert showtime.screen_type == "IMAX"
+
+    def test_default_screen_type(self):
+        """Test that screen_type defaults to 2D."""
+        showtime = Showtime(
+            cinema="Test Cinema",
+            location="Test Location",
+            title="Test Movie",
+            time="19:00",
+            date=datetime.now() + timedelta(days=1),
+        )
+        assert showtime.screen_type == "2D"
+
     def test_missing_cinema(self):
         showtime = Showtime(
             cinema="",
