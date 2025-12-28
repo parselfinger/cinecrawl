@@ -1,11 +1,17 @@
 """Filmworld Cinemas provider."""
 
+from datetime import datetime
+
 import httpx
 from bs4 import BeautifulSoup
 
+from logging_config import get_logger
 from models import Showtime
 from providers.base import BaseProvider
+from providers.utils import parse_time_to_datetime
 from retry import async_retry
+
+logger = get_logger(__name__)
 
 
 class FilmworldProvider(BaseProvider):
@@ -35,9 +41,10 @@ class FilmworldProvider(BaseProvider):
             date_cells = item.find_all("div", class_="amy-cell")
             for cell in date_cells:
                 head = cell.find("div", class_="amy-head")
+                date_str = None
                 if head:
                     day_divs = head.find_all("div")
-                    date = (
+                    date_str = (
                         day_divs[1].get_text(strip=True) if len(day_divs) > 1 else None
                     )
 
@@ -46,15 +53,45 @@ class FilmworldProvider(BaseProvider):
                     time_elements = times_div.find_all("div", recursive=False)
                     for time_elem in time_elements:
                         time_text = time_elem.get_text(strip=True)
-                        if time_text and ":" in time_text:
-                            showtimes.append(
-                                Showtime(
-                                    cinema=self.cinema_name,
-                                    location=self.location,
-                                    title=title,
-                                    date=date,
-                                    time=time_text,
+                        if not time_text or ":" not in time_text:
+                            continue
+
+                        # Parse date string if available, otherwise use today
+                        date_obj = None
+                        if date_str:
+                            try:
+                                # Try common date formats
+                                for fmt in ["%b %d", "%B %d", "%d %b", "%d %B"]:
+                                    try:
+                                        parsed = datetime.strptime(date_str, fmt)
+                                        # Add current year
+                                        date_obj = parsed.replace(
+                                            year=datetime.now().year
+                                        ).date()
+                                        break
+                                    except ValueError:
+                                        continue
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to parse date '{date_str}': {e}"
                                 )
+
+                        showtime_dt = parse_time_to_datetime(time_text, date_obj)
+                        if showtime_dt is None:
+                            logger.warning(
+                                f"Skipping showtime for {title}: "
+                                f"failed to parse time '{time_text}'"
                             )
+                            continue
+
+                        showtimes.append(
+                            Showtime(
+                                cinema=self.cinema_name,
+                                location=self.location,
+                                title=title,
+                                date=showtime_dt,
+                                time=time_text,
+                            )
+                        )
 
         return showtimes

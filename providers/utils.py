@@ -1,6 +1,6 @@
-"""Shared utilities for FusionIntel API-based cinema providers."""
+"""Shared utilities for cinema providers."""
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 
@@ -9,6 +9,48 @@ from models import Showtime
 from retry import async_retry
 
 logger = get_logger(__name__)
+
+
+def parse_time_to_datetime(
+    time_str: str, date_obj: date | None = None
+) -> datetime | None:
+    """
+    Parse a time string and combine with a date to create a datetime object.
+
+    Args:
+        time_str: Time string (e.g., "7:30pm", "10:00 AM", "14:30")
+        date_obj: Date to combine with time. If None, uses today's date.
+
+    Returns:
+        datetime object or None if parsing fails
+
+    Examples:
+        >>> parse_time_to_datetime("7:30pm")
+        datetime(2024, 1, 15, 19, 30)
+        >>> parse_time_to_datetime("10:00 AM", date(2024, 1, 20))
+        datetime(2024, 1, 20, 10, 0)
+    """
+    if date_obj is None:
+        date_obj = datetime.today().date()
+
+    cleaned = time_str.strip().lower().replace(" ", "")
+    cleaned = cleaned.replace(".", ":")
+
+    formats = [
+        "%I:%M%p",  # 7:30pm
+        "%I%p",  # 7pm
+        "%H:%M",  # 19:30 (24-hour)
+    ]
+
+    for fmt in formats:
+        try:
+            time_obj = datetime.strptime(cleaned, fmt).time()
+            return datetime.combine(date_obj, time_obj)
+        except ValueError:
+            continue
+
+    logger.warning(f"Failed to parse time string: {time_str}")
+    return None
 
 
 @async_retry(max_attempts=3, backoff_factor=2.0)

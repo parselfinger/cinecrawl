@@ -1,14 +1,17 @@
 """Blue Pictures Cinemas provider."""
 
 import re
-from datetime import datetime
 
 import httpx
 from bs4 import BeautifulSoup
 
+from logging_config import get_logger
 from models import Showtime
 from providers.base import BaseProvider
+from providers.utils import parse_time_to_datetime
 from retry import async_retry
+
+logger = get_logger(__name__)
 
 
 class BluePicturesProvider(BaseProvider):
@@ -64,13 +67,20 @@ class BluePicturesProvider(BaseProvider):
             times = re.findall(r"\d{1,2}:\d{2}[ap]m", showtime_text, re.IGNORECASE)
 
             for time in times:
+                showtime_dt = parse_time_to_datetime(time)
+                if showtime_dt is None:
+                    logger.warning(
+                        f"Skipping showtime for {title}: failed to parse time '{time}'"
+                    )
+                    continue
+
                 showtimes.append(
                     Showtime(
                         cinema=self.cinema_name,
                         location=self.location,
                         title=title,
                         time=time,
-                        date=datetime.today().strftime("%B %d, %Y"),
+                        date=showtime_dt,
                     )
                 )
 
