@@ -44,7 +44,6 @@ build/
 
 # Project files
 showtimes.json
-movie_cache.py
 
 # CI/CD
 .github/
