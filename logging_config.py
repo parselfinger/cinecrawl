@@ -4,25 +4,6 @@ import logging
 import sys
 
 
-class ColoredFormatter(logging.Formatter):
-    """Custom formatter with colors for different log levels."""
-
-    COLORS = {
-        "DEBUG": "\033[36m",  # Cyan
-        "INFO": "\033[32m",  # Green
-        "WARNING": "\033[33m",  # Yellow
-        "ERROR": "\033[31m",  # Red
-        "CRITICAL": "\033[35m",  # Magenta
-    }
-    RESET = "\033[0m"
-
-    def format(self, record: logging.LogRecord) -> str:
-        """Format log record with colors."""
-        log_color = self.COLORS.get(record.levelname, self.RESET)
-        record.levelname = f"{log_color}{record.levelname}{self.RESET}"
-        return super().format(record)
-
-
 def setup_logging(level: str = "INFO") -> None:
     """
     Configure logging for the application.
@@ -36,11 +17,11 @@ def setup_logging(level: str = "INFO") -> None:
     # Remove existing handlers
     logger.handlers.clear()
 
-    # Console handler with colored output
+    # Console handler with standard formatting (no colors)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, level.upper()))
 
-    formatter = ColoredFormatter(
+    formatter = logging.Formatter(
         fmt="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -52,4 +33,5 @@ def setup_logging(level: str = "INFO") -> None:
 
 
 def get_logger(name: str) -> logging.Logger:
+    """Get a logger instance for the given module name."""
     return logging.getLogger(f"cinecrawl.{name}")
