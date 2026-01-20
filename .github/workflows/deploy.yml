@@ -53,9 +53,15 @@ jobs:
           aws lambda wait function-updated \
             --function-name $LAMBDA_FUNCTION_NAME
 
+          # Update function configuration for optimal performance
+          aws lambda update-function-configuration \
+            --function-name $LAMBDA_FUNCTION_NAME \
+            --memory-size 1024 \
+            --timeout 900
+
       - name: Deployment summary
         run: |
-          echo "### Deployment Successful! :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "### Deployment Successful!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Function:** $LAMBDA_FUNCTION_NAME" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** ${{ steps.build-image.outputs.image }}" >> $GITHUB_STEP_SUMMARY
