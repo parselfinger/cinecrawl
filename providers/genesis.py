@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 from logging_config import get_logger
 from models import Showtime
+from movie_cache import get_global_cache
 from providers.base import BaseProvider
 from retry import async_retry
 
@@ -58,6 +59,7 @@ async def _fetch_genesis_showtimes(
 
     showtimes = []
     seen = set()
+    year_cache = {}  # Cache movie years to avoid duplicate detail page fetches
     today = datetime.now()
 
     for day_offset in range(5):
@@ -85,53 +87,127 @@ async def _fetch_genesis_showtimes(
 
         movie_containers = soup.find_all("div", class_="movie-tabs")
 
-        for container in movie_containers:
-            title_elem = container.find("h3", class_="no-underline")
-            if not title_elem:
-                continue
-            title_link = title_elem.find("a")
-            if title_link:
-                title = " ".join(title_link.get_text().split())
-            else:
-                title = None
-            if not title:
-                continue
+        async with httpx.AsyncClient(
+            timeout=30.0, follow_redirects=True
+        ) as detail_client:
+            for container in movie_containers:
+                title_elem = container.find("h3", class_="no-underline")
+                if not title_elem:
+                    continue
+                title_link = title_elem.find("a")
+                if title_link:
+                    title = " ".join(title_link.get_text().split())
+                else:
+                    title = None
+                if not title:
+                    continue
 
-            # Extract showtimes
-            showtime_list = container.find("div", class_="jacro-showtime-list")
-            if not showtime_list:
-                continue
+                year = None
 
-            # Find the main visible showtime container (neworderpf)
-            # Avoid the hidden duplicates in innercatdived
-            neworderpf = showtime_list.find("div", class_="neworderpf")
-            if not neworderpf:
-                continue
+                global_cache = get_global_cache()
+                if global_cache:
+                    match = global_cache.find_match(title, None)
+                    if match:
+                        _, _, cached_year = match
+                        year = cached_year
+                        logger.debug(
+                            f"Global cache hit for '{title}': year={cached_year}"
+                        )
 
-            # Find all performance buttons in the visible section only
-            perf_buttons = neworderpf.find_all(
-                "a", class_=lambda x: x and "perfbtn" in x
-            )
+                if year is None:
+                    cache_key = title.lower().strip()
+                    if cache_key in year_cache:
+                        year = year_cache[cache_key]
+                        logger.debug(f"Session cache hit for '{title}': year={year}")
 
-            for button in perf_buttons:
-                time_text = button.get_text(strip=True)
-                if time_text:
-                    showtime_dt = _parse_time(time_text, target_date)
-                    if not showtime_dt:
+                if year is None:
+                    synopsis_link = container.find("a", id="tempsynoplink")
+                    if synopsis_link:
+                        detail_url = synopsis_link.get("href")
+                    elif title_link:
+                        detail_url = title_link.get("href")
+                    else:
+                        detail_url = None
+
+                    if detail_url:
+                        try:
+                            detail_response = await detail_client.get(detail_url)
+                            detail_response.raise_for_status()
+                            detail_soup = BeautifulSoup(
+                                detail_response.text, "html.parser"
+                            )
+
+                            movie_info = detail_soup.find("ul", class_="movie-info")
+                            if movie_info:
+                                for li in movie_info.find_all("li"):
+                                    text = li.get_text(strip=True)
+                                    if text.startswith("Released"):
+                                        # Extract date from "Released 2025-12-12"
+                                        date_str = text.replace("Released", "").strip()
+                                        try:
+                                            parsed_date = datetime.strptime(
+                                                date_str, "%Y-%m-%d"
+                                            )
+                                            year = parsed_date.year
+                                            logger.debug(
+                                                f"Extracted year {year} from detail "
+                                                f"page for '{title}'"
+                                            )
+                                            break
+                                        except ValueError:
+                                            logger.warning(
+                                                f"Could not parse release date "
+                                                f"'{date_str}' for '{title}'"
+                                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to fetch detail page for '{title}': {e}"
+                            )
+
+                    if year is None:
+                        logger.warning(f"Skipping '{title}': no release year found")
                         continue
 
-                    key = (title, showtime_dt)
-                    if key not in seen:
-                        seen.add(key)
-                        showtimes.append(
-                            Showtime(
-                                cinema=cinema_name,
-                                location=location_name,
-                                title=title,
-                                time=time_text,
-                                date=showtime_dt,
+                    # Cache the year for this movie in session cache
+                    year_cache[cache_key] = year
+
+                # Final check - skip if still no year
+                if year is None:
+                    logger.warning(f"Skipping '{title}': no release year found")
+                    continue
+
+                showtime_list = container.find("div", class_="jacro-showtime-list")
+                if not showtime_list:
+                    continue
+
+                neworderpf = showtime_list.find("div", class_="neworderpf")
+                if not neworderpf:
+                    continue
+
+                perf_buttons = neworderpf.find_all(
+                    "a", class_=lambda x: x and "perfbtn" in x
+                )
+
+                for button in perf_buttons:
+                    time_text = button.get_text(strip=True)
+                    if time_text:
+                        showtime_dt = _parse_time(time_text, target_date)
+                        if not showtime_dt:
+                            continue
+
+                        key = (title, showtime_dt)
+                        if key not in seen:
+                            seen.add(key)
+                            showtimes.append(
+                                Showtime(
+                                    cinema=cinema_name,
+                                    location=location_name,
+                                    title=title,
+                                    time=time_text,
+                                    date=showtime_dt,
+                                    year=year,
+                                )
                             )
-                        )
 
     return showtimes
 
@@ -152,9 +228,6 @@ class GenesisProvider(BaseProvider):
             location_name=self.location,
             cinema_id=self.cinema_id,
         )
-
-
-# Concrete providers for each location
 
 
 class GenesisMarylandProvider(GenesisProvider):

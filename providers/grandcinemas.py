@@ -5,9 +5,12 @@ from datetime import datetime, timedelta
 import httpx
 from bs4 import BeautifulSoup
 
+from logging_config import get_logger
 from models import Showtime
 from providers.base import BaseProvider
 from retry import async_retry
+
+logger = get_logger(__name__)
 
 DAY_MAP = {0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"}
 
@@ -53,53 +56,122 @@ class GrandCinemasProvider(BaseProvider):
 
         showtimes = []
         seen = set()
+        year_cache = {}  # Cache movie years to avoid duplicate detail page fetches
 
         today = datetime.now()
 
         movie_tabs = soup.find_all("div", class_="movie-tabs")
 
-        for tab in movie_tabs:
-            title_elem = tab.find("h3", class_="no-underline")
-            if not title_elem:
-                continue
-            title = " ".join(title_elem.get_text().split())
-
-            current_weekday = today.weekday()
-
-            for day_index, day_abbr in DAY_MAP.items():
-                if day_index < current_weekday:
+        async with httpx.AsyncClient(
+            timeout=30.0, follow_redirects=True
+        ) as detail_client:
+            for tab in movie_tabs:
+                title_elem = tab.find("h3", class_="no-underline")
+                if not title_elem:
+                    continue
+                title_link = title_elem.find("a")
+                if title_link:
+                    title = " ".join(title_link.get_text().split())
+                else:
+                    title = None
+                if not title:
                     continue
 
-                day_class = f"{day_abbr}-time"
-                day_divs = tab.find_all("div", class_=day_class)
+                cache_key = title.lower().strip()
+                if cache_key in year_cache:
+                    year = year_cache[cache_key]
+                    logger.debug(f"Cache hit for '{title}': year={year}")
+                else:
+                    # Find the "Full synopsis" link, fallback to title link
+                    synopsis_link = tab.find("a", id="tempsynoplink")
+                    if synopsis_link:
+                        detail_url = synopsis_link.get("href")
+                    elif title_link:
+                        detail_url = title_link.get("href")
+                    else:
+                        detail_url = None
 
-                if not day_divs:
-                    continue
-
-                days_ahead = day_index - current_weekday
-                target_date = today + timedelta(days=days_ahead)
-
-                day_div = day_divs[0]
-                time_spans = day_div.find_all("span", class_="time")
-
-                for time_span in time_spans:
-                    time_text = " ".join(time_span.get_text().split())
-                    if time_text:
-                        showtime_dt = _parse_time(time_text, target_date)
-                        if not showtime_dt:
-                            continue
-
-                        key = (title, showtime_dt)
-                        if key not in seen:
-                            seen.add(key)
-                            showtimes.append(
-                                Showtime(
-                                    cinema=self.cinema_name,
-                                    location=self.location,
-                                    title=title,
-                                    time=time_text,
-                                    date=showtime_dt,
-                                )
+                    # Fetch year from detail page
+                    year = None
+                    if detail_url:
+                        try:
+                            detail_response = await detail_client.get(detail_url)
+                            detail_response.raise_for_status()
+                            detail_soup = BeautifulSoup(
+                                detail_response.text, "html.parser"
                             )
+
+                            movie_info = detail_soup.find("ul", class_="movie-info")
+                            if movie_info:
+                                for li in movie_info.find_all("li"):
+                                    text = li.get_text(strip=True)
+                                    if text.startswith("Released"):
+                                        # Extract date from "Released 2025-12-12"
+                                        date_str = text.replace("Released", "").strip()
+                                        try:
+                                            parsed_date = datetime.strptime(
+                                                date_str, "%Y-%m-%d"
+                                            )
+                                            year = parsed_date.year
+                                            logger.debug(
+                                                f"Extracted year {year} from detail "
+                                                f"page for '{title}'"
+                                            )
+                                            break
+                                        except ValueError:
+                                            logger.warning(
+                                                f"Could not parse release date "
+                                                f"'{date_str}' for '{title}'"
+                                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to fetch detail page for '{title}': {e}"
+                            )
+
+                    if year is None:
+                        logger.warning(f"Skipping '{title}': no release year found")
+                        continue
+
+                    # Cache the year for this movie
+                    year_cache[cache_key] = year
+
+                current_weekday = today.weekday()
+
+                for day_index, day_abbr in DAY_MAP.items():
+                    if day_index < current_weekday:
+                        continue
+
+                    day_class = f"{day_abbr}-time"
+                    day_divs = tab.find_all("div", class_=day_class)
+
+                    if not day_divs:
+                        continue
+
+                    days_ahead = day_index - current_weekday
+                    target_date = today + timedelta(days=days_ahead)
+
+                    day_div = day_divs[0]
+                    time_spans = day_div.find_all("span", class_="time")
+
+                    for time_span in time_spans:
+                        time_text = " ".join(time_span.get_text().split())
+                        if time_text:
+                            showtime_dt = _parse_time(time_text, target_date)
+                            if not showtime_dt:
+                                continue
+
+                            key = (title, showtime_dt)
+                            if key not in seen:
+                                seen.add(key)
+                                showtimes.append(
+                                    Showtime(
+                                        cinema=self.cinema_name,
+                                        location=self.location,
+                                        title=title,
+                                        time=time_text,
+                                        date=showtime_dt,
+                                        year=year,
+                                    )
+                                )
 
         return showtimes

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from db import cleanup_old_showtimes, save_showtimes_to_db
 from logging_config import get_logger, setup_logging
 from models import CinemaResult
+from movie_cache import MovieCache, set_global_cache
 from providers.base import BaseProvider
 from providers.bluepictures import BluePicturesProvider
 from providers.ebonylife import EbonyLifeProvider
@@ -26,7 +27,6 @@ from providers.genesis import (
     GenesisLekkiProvider,
     GenesisMarylandProvider,
 )
-from providers.grandcinemas import GrandCinemasProvider
 from providers.magnificent import MagnificentProvider
 from providers.ozonecinemas import OzoneCinemasProvider
 from providers.silverbird import SilverbirdGalleriaProvider, SilverbirdIkejaProvider
@@ -65,7 +65,7 @@ PROVIDERS: list[BaseProvider] = [
     GenesisMarylandProvider(),
     GenesisFestacProvider(),
     GenesisLekkiProvider(),
-    GrandCinemasProvider(),
+    # GrandCinemasProvider(),
     MagnificentProvider(),
     SilverbirdIkejaProvider(),
     SilverbirdGalleriaProvider(),
@@ -101,6 +101,15 @@ async def fetch_all() -> list[CinemaResult]:
 
 async def main():
     logger.info(f"Starting fetch from {len(PROVIDERS)} providers")
+
+    database_url = os.getenv("DATABASE_URL")
+    cache = None
+    if database_url:
+        cache = MovieCache()
+        cache.load_from_db(database_url)
+        set_global_cache(cache)  # Make cache accessible to providers
+        logger.info(f"Movie cache loaded with {len(cache)} movies")
+
     results = await fetch_all()
 
     successful = [r for r in results if r.success]
@@ -117,27 +126,11 @@ async def main():
     unique_showtimes = deduplicate_showtimes(valid_showtimes)
 
     # Save to database
-    database_url = os.getenv("DATABASE_URL")
     if database_url:
         logger.info("Saving to database with movie normalization...")
+        logger.info("Using IMDB Dev API for movie normalization")
 
-        # Check which APIs are available
-        has_tmdb = bool(os.getenv("TMDB_API_KEY"))
-        has_omdb = bool(os.getenv("OMDB_API_KEY"))
-
-        if has_tmdb and has_omdb:
-            logger.info("Using TMDB (primary) with OMDb fallback")
-        elif has_tmdb:
-            logger.info("Using TMDB only (no fallback)")
-        elif has_omdb:
-            logger.info("Using OMDb only (no TMDB)")
-        else:
-            logger.warning(
-                "No API keys set! Movies will use original titles. "
-                "Recommended: Get free TMDB key at https://www.themoviedb.org/settings/api"
-            )
-
-        db_stats = save_showtimes_to_db(unique_showtimes, database_url)
+        db_stats = save_showtimes_to_db(unique_showtimes, database_url, cache)
 
         logger.info(
             f"Database stats: {db_stats['inserted']} new, "

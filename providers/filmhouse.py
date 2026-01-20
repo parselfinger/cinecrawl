@@ -148,6 +148,8 @@ class FilmHouseProvider(BaseProvider):
                     if not title:
                         continue
 
+                    year = movie.get("movie_year")
+
                     show_times = movie.get("show_times", [])
                     for show_time in show_times:
                         time_slot = show_time.get("show_time_slots")
@@ -184,14 +186,12 @@ class FilmHouseProvider(BaseProvider):
                                     title=title,
                                     time=time_text,
                                     date=showtime_dt,
+                                    year=year,
                                     screen_type=theater_experience,
                                 )
                             )
 
         return showtimes
-
-
-# Concrete providers for each FilmHouse location
 
 
 class FilmHouseLandmarkProvider(FilmHouseProvider):

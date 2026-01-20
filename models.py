@@ -9,6 +9,7 @@ class Showtime:
     title: str
     time: str
     date: datetime
+    year: int
     screen_type: str = "2D"
 
 

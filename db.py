@@ -13,35 +13,63 @@ def get_connection(database_url: str):
     return psycopg2.connect(database_url)
 
 
-def get_or_create_movie(conn, title: str) -> int:
+def get_or_create_movie(conn, title: str, year: int, cache=None) -> int:
     """
-    Get existing movie by title or create new one with TMDB data.
+    Get existing movie by title or create new one with IMDB data.
+
+    Optimization: Uses in-memory cache with fuzzy matching before hitting database.
+
+    Flow:
+    1. Check in-memory cache with fuzzy matching (85% similarity)
+    2. If not found, normalize via IMDB API (which uses session cache)
+    3. Insert new movie and add to cache
 
     Args:
         conn: psycopg2 connection
         title: Movie title from scraper
+        year: Release year (required for better API matching)
+        cache: Optional MovieCache instance for fuzzy matching
 
     Returns:
         Movie ID
     """
-    with conn.cursor() as cur:
-        movie_data = get_normalized_movie(title)
-        normalized_title = movie_data["title"]
+    if cache:
+        match = cache.find_match(title, year)
+        if match:
+            movie_id, db_title, db_year = match
+            logger.debug(f"Cache hit: '{title}' → '{db_title}' (id={movie_id})")
+            return movie_id
 
+    # Not in cache - normalize using IMDB API (uses session cache)
+    movie_data = get_normalized_movie(title, year)
+    normalized_title = movie_data["title"]
+
+    # Check if normalized title already exists in DB
+    # (handles case where scraper gives different title but API normalizes to same)
+    with conn.cursor() as cur:
         cur.execute(
             "SELECT id FROM movies WHERE title = %s LIMIT 1", (normalized_title,)
         )
         result = cur.fetchone()
         if result:
             movie_id = result[0]
-            logger.debug(f"Found existing movie: {normalized_title} (id={movie_id})")
+            logger.debug(
+                f"Found existing movie after normalization:"
+                f" '{title}' → '{normalized_title}' (id={movie_id})"
+            )
+            # Add to cache for future lookups
+            if cache:
+                cache.add_movie(
+                    movie_id, normalized_title, movie_data.get("release_year")
+                )
             return movie_id
 
+        # Create new movie
         cur.execute(
             """
             INSERT INTO movies (title, description, release_year, duration_minutes,
-            rating, poster_url, backdrop_url)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            rating, poster_url)
+            VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -51,7 +79,6 @@ def get_or_create_movie(conn, title: str) -> int:
                 movie_data.get("duration_minutes"),
                 movie_data.get("rating"),
                 movie_data.get("poster_url"),
-                movie_data.get("backdrop_url"),
             ),
         )
 
@@ -62,6 +89,11 @@ def get_or_create_movie(conn, title: str) -> int:
         logger.info(
             f"Created movie from {source.upper()}: {normalized_title} (id={movie_id})"
         )
+
+        # Add to cache for future lookups
+        if cache:
+            cache.add_movie(movie_id, normalized_title, movie_data.get("release_year"))
+
         return movie_id
 
 
@@ -109,6 +141,7 @@ def get_or_create_cinema(conn, name: str, location: str) -> int:
 def save_showtimes_to_db(
     showtimes: list[ShowtimeDataclass],
     database_url: str,
+    cache=None,
 ) -> dict:
     """
     Save showtimes to database using direct SQL.
@@ -116,6 +149,7 @@ def save_showtimes_to_db(
     Args:
         showtimes: List of Showtime dataclass objects
         database_url: PostgreSQL connection string
+        cache: Optional MovieCache instance for fuzzy matching
 
     Returns:
         Dict with stats: inserted, duplicates, errors
@@ -126,7 +160,9 @@ def save_showtimes_to_db(
     try:
         for showtime in showtimes:
             try:
-                movie_id = get_or_create_movie(conn, showtime.title)
+                movie_id = get_or_create_movie(
+                    conn, showtime.title, showtime.year, cache
+                )
 
                 cinema_id = get_or_create_cinema(
                     conn, showtime.cinema, showtime.location

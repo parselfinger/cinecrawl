@@ -6,6 +6,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from models import Showtime
+from movie_cache import get_global_cache
 from providers.base import BaseProvider
 from retry import async_retry
 
@@ -105,6 +106,56 @@ def _combine_datetime(date_obj: date, time_text: str) -> datetime:
 
 
 @async_retry(max_attempts=3, backoff_factor=2.0)
+async def _fetch_movie_year(client: httpx.AsyncClient, movie_url: str) -> int | None:
+    """
+    Fetch release year from a Silverbird movie detail page.
+
+    Args:
+        client: HTTP client to use
+        movie_url: URL to the movie detail page
+
+    Returns:
+        Release year or None if not found
+
+    Example HTML:
+        <div class="desc-mv">
+            <p><span>Release: </span>January 16, 2026</p>
+            ...
+        </div>
+    """
+    try:
+        response = await client.get(movie_url)
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        desc_div = soup.find("div", class_="desc-mv")
+        if not desc_div:
+            return None
+
+        # Find the paragraph containing "Release:"
+        for p in desc_div.find_all("p"):
+            text = p.get_text()
+            if "Release:" in text:
+                # Extract date string after "Release: "
+                date_str = text.split("Release:")[-1].strip()
+                # Parse the date to extract year
+                # Format: "January 16, 2026" or similar
+                try:
+                    parsed_date = datetime.strptime(date_str, "%B %d, %Y")
+                    return parsed_date.year
+                except ValueError:
+                    # Try alternate format without day
+                    try:
+                        parsed_date = datetime.strptime(date_str, "%B %Y")
+                        return parsed_date.year
+                    except ValueError:
+                        return None
+
+        return None
+    except Exception:
+        return None
+
+
+@async_retry(max_attempts=3, backoff_factor=2.0)
 async def _fetch_silverbird_showtimes(
     cinema_name: str, location_name: str, url_slug: str
 ) -> list[Showtime]:
@@ -125,63 +176,85 @@ async def _fetch_silverbird_showtimes(
         response = await client.get(url)
         soup = BeautifulSoup(response.text, "html.parser")
 
-    showtimes = []
+        showtimes = []
+        movie_articles = soup.find_all("article", class_="entry-item")
+        now = datetime.now()
 
-    movie_articles = soup.find_all("article", class_="entry-item")
+        # Cache for movie years to avoid duplicate fetches
+        year_cache: dict[str, int | None] = {}
 
-    now = datetime.now()
+        # Get global cache for fuzzy matching
+        global_cache = get_global_cache()
 
-    for article in movie_articles:
-        title_elem = article.find("h4", class_="entry-title")
-        if not title_elem:
-            continue
-        title_link = title_elem.find("a")
-        if title_link:
-            title = " ".join(title_link.get_text().split())
-        else:
-            title = None
-        if not title:
-            continue
-
-        showtime_elem = article.find("p", class_="cinema_page_showtime")
-        if not showtime_elem:
-            continue
-
-        showtime_text = showtime_elem.get_text()
-
-        # Extract day ranges and their times
-        parts = showtime_text.split("Showtime:")[-1].strip()
-
-        day_patterns = re.findall(
-            r"([A-Z\-]+):\s*([^A-Z]+?)(?=[A-Z\-]+:|$)", parts, re.DOTALL
-        )
-
-        for day_range, times_text in day_patterns:
-            if "to be updated" in times_text.lower() or "tba" in times_text.lower():
+        for article in movie_articles:
+            title_elem = article.find("h4", class_="entry-title")
+            if not title_elem:
+                continue
+            title_link = title_elem.find("a")
+            if title_link:
+                title = " ".join(title_link.get_text().split())
+                movie_url = title_link.get("href")
+            else:
+                title = None
+                movie_url = None
+            if not title:
                 continue
 
-            expanded_dates = _expand_day_range(day_range, now)
-            if not expanded_dates:
+            # Try to get year from global cache first (avoids HTTP request)
+            year = None
+            if global_cache:
+                match = global_cache.find_match(title, year=None)
+                if match:
+                    _, _, year = match
+
+            # If not in cache, fetch from movie detail page
+            if year is None and movie_url:
+                if movie_url in year_cache:
+                    year = year_cache[movie_url]
+                else:
+                    year = await _fetch_movie_year(client, movie_url)
+                    year_cache[movie_url] = year
+
+            showtime_elem = article.find("p", class_="cinema_page_showtime")
+            if not showtime_elem:
                 continue
 
-            # Extract individual times
-            times = re.findall(r"\d{1,2}:\d{2}\s*[ap]m", times_text, re.IGNORECASE)
+            showtime_text = showtime_elem.get_text()
 
-            if not times:
-                continue
+            # Extract day ranges and their times
+            parts = showtime_text.split("Showtime:")[-1].strip()
 
-            for expanded_date in expanded_dates:
-                for time in times:
-                    start_at = _combine_datetime(expanded_date, time)
-                    showtimes.append(
-                        Showtime(
-                            cinema=cinema_name,
-                            location=location_name,
-                            title=title,
-                            time=time,
-                            date=start_at,
+            day_patterns = re.findall(
+                r"([A-Z\-]+):\s*([^A-Z]+?)(?=[A-Z\-]+:|$)", parts, re.DOTALL
+            )
+
+            for day_range, times_text in day_patterns:
+                if "to be updated" in times_text.lower() or "tba" in times_text.lower():
+                    continue
+
+                expanded_dates = _expand_day_range(day_range, now)
+                if not expanded_dates:
+                    continue
+
+                # Extract individual times
+                times = re.findall(r"\d{1,2}:\d{2}\s*[ap]m", times_text, re.IGNORECASE)
+
+                if not times:
+                    continue
+
+                for expanded_date in expanded_dates:
+                    for time in times:
+                        start_at = _combine_datetime(expanded_date, time)
+                        showtimes.append(
+                            Showtime(
+                                cinema=cinema_name,
+                                location=location_name,
+                                title=title,
+                                time=time,
+                                date=start_at,
+                                year=year,
+                            )
                         )
-                    )
 
     return showtimes
 

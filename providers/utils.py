@@ -29,12 +29,18 @@ def parse_time_to_datetime(
         datetime(2024, 1, 15, 19, 30)
         >>> parse_time_to_datetime("10:00 AM", date(2024, 1, 20))
         datetime(2024, 1, 20, 10, 0)
+        >>> parse_time_to_datetime("3:20PPM")  # Handle typos
+        datetime(2024, 1, 15, 15, 20)
     """
     if date_obj is None:
         date_obj = datetime.today().date()
 
     cleaned = time_str.strip().lower().replace(" ", "")
     cleaned = cleaned.replace(".", ":")
+
+    # Fix common typos: "ppm" -> "pm", "aam" -> "am"
+    cleaned = cleaned.replace("ppm", "pm")
+    cleaned = cleaned.replace("aam", "am")
 
     formats = [
         "%I:%M%p",  # 7:30pm
@@ -110,6 +116,9 @@ async def fetch_fusionintel_showtimes(
                 if not title:
                     continue
 
+                release_date = film.get("releaseDate")
+                year = datetime.fromisoformat(release_date.replace("Z", "+00:00")).year
+
                 for showtime in film_showtimes:
                     start_time_str = showtime.get("startTime")
                     status = showtime.get("status")
@@ -139,6 +148,7 @@ async def fetch_fusionintel_showtimes(
                                 title=title,
                                 time=time_text,
                                 date=showtime_dt,
+                                year=year,
                             )
                         )
 

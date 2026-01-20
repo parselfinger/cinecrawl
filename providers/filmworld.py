@@ -37,6 +37,48 @@ class FilmworldProvider(BaseProvider):
                 continue
             title = title_elem.get_text(strip=True)
 
+            # Extract year from release date custom field
+            year = None
+            release_date_div = item.find(
+                "div",
+                class_="amy-movie-custom-field-group amy-movie-field-release_date",
+            )
+            if not release_date_div:
+                logger.warning(f"Skipping '{title}': no release_date field found")
+                continue
+
+            content_div = release_date_div.find(
+                "div", class_="amy-movie-custom-field-content"
+            )
+            if not content_div:
+                logger.warning(
+                    f"Skipping '{title}': no content div in release_date field"
+                )
+                continue
+
+            release_date_str = content_div.get_text(strip=True)
+            if not release_date_str:
+                logger.warning(f"Skipping '{title}': empty release date content")
+                continue
+
+            for fmt in ["%B %d, %Y", "%b %d, %Y", "%Y-%m-%d", "%d %B %Y", "%d %b %Y"]:
+                try:
+                    parsed_date = datetime.strptime(release_date_str, fmt)
+                    year = parsed_date.year
+                    logger.debug(
+                        f"Extracted year {year} from release date for '{title}'"
+                    )
+                    break
+                except ValueError:
+                    continue
+
+            if year is None:
+                logger.warning(
+                    f"Skipping '{title}': could not parse date from "
+                    f"'{release_date_str}'"
+                )
+                continue
+
             # Extract times
             date_cells = item.find_all("div", class_="amy-cell")
             for cell in date_cells:
@@ -91,6 +133,7 @@ class FilmworldProvider(BaseProvider):
                                 title=title,
                                 date=showtime_dt,
                                 time=time_text,
+                                year=year,
                             )
                         )
 

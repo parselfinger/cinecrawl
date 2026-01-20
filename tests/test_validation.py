@@ -12,6 +12,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert validate_showtime(showtime) is True
 
@@ -23,6 +24,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
             screen_type="IMAX",
         )
         assert validate_showtime(showtime) is True
@@ -36,6 +38,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert showtime.screen_type == "2D"
 
@@ -46,6 +49,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert validate_showtime(showtime) is False
 
@@ -56,6 +60,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert validate_showtime(showtime) is False
 
@@ -66,6 +71,7 @@ class TestValidateShowtime:
             title="",
             time="19:00",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert validate_showtime(showtime) is False
 
@@ -76,6 +82,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="",
             date=datetime.now() + timedelta(days=1),
+            year=2024,
         )
         assert validate_showtime(showtime) is False
 
@@ -86,6 +93,7 @@ class TestValidateShowtime:
             title="Test Movie",
             time="19:00",
             date=datetime.now() - timedelta(days=2),
+            year=2024,
         )
         assert validate_showtime(showtime) is False
 
@@ -94,9 +102,9 @@ class TestValidateShowtimes:
     def test_filters_invalid_showtimes(self):
         dt = datetime.now() + timedelta(days=1)
         showtimes = [
-            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt),
-            Showtime("", "Location 2", "Movie 2", "20:00", dt),  # Invalid
-            Showtime("Cinema 3", "Location 3", "Movie 3", "21:00", dt),
+            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt, 2024),
+            Showtime("", "Location 2", "Movie 2", "20:00", dt, 2024),  # Invalid
+            Showtime("Cinema 3", "Location 3", "Movie 3", "21:00", dt, 2024),
         ]
         valid = validate_showtimes(showtimes)
         assert len(valid) == 2
@@ -107,8 +115,8 @@ class TestValidateShowtimes:
         """Test when all showtimes are valid."""
         dt = datetime.now() + timedelta(days=1)
         showtimes = [
-            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt),
-            Showtime("Cinema 2", "Location 2", "Movie 2", "20:00", dt),
+            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt, 2024),
+            Showtime("Cinema 2", "Location 2", "Movie 2", "20:00", dt, 2024),
         ]
         valid = validate_showtimes(showtimes)
         assert len(valid) == 2
@@ -116,8 +124,8 @@ class TestValidateShowtimes:
     def test_all_invalid(self):
         dt = datetime.now() + timedelta(days=1)
         showtimes = [
-            Showtime("", "Location 1", "Movie 1", "19:00", dt),
-            Showtime("Cinema 2", "", "Movie 2", "20:00", dt),
+            Showtime("", "Location 1", "Movie 1", "19:00", dt, 2024),
+            Showtime("Cinema 2", "", "Movie 2", "20:00", dt, 2024),
         ]
         valid = validate_showtimes(showtimes)
         assert len(valid) == 0
@@ -127,9 +135,9 @@ class TestDeduplicateShowtimes:
     def test_removes_duplicates_with_date(self):
         dt = datetime.now() + timedelta(days=1)
         showtimes = [
-            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt),
-            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt),
-            Showtime("Cinema 1", "Location 1", "Movie 2", "20:00", dt),
+            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt, 2024),
+            Showtime("Cinema 1", "Location 1", "Movie 1", "19:00", dt, 2024),
+            Showtime("Cinema 1", "Location 1", "Movie 2", "20:00", dt, 2024),
         ]
         unique = deduplicate_showtimes(showtimes)
         assert len(unique) == 2

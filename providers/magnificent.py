@@ -1,5 +1,7 @@
 """Magnificent Cinemas provider."""
 
+from datetime import datetime
+
 import httpx
 from bs4 import BeautifulSoup
 
@@ -38,6 +40,8 @@ class MagnificentProvider(BaseProvider):
             if not title:
                 continue
 
+            year = datetime.now().year
+
             movie_meta = back.find("ul", class_="movie-meta")
             times = []
 
@@ -64,6 +68,7 @@ class MagnificentProvider(BaseProvider):
                         title=title,
                         time=time,
                         date=showtime_dt,
+                        year=year,
                     )
                 )
 

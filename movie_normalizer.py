@@ -1,154 +1,140 @@
-import os
+import re
 
 import requests
-import tmdbsimple as tmdb
-from dotenv import load_dotenv
 
 from logging_config import get_logger
 
-load_dotenv()
 logger = get_logger(__name__)
 
-tmdb.API_KEY = os.getenv("TMDB_API_KEY")
-OMDB_API_KEY = os.getenv("OMDB_API_KEY")
+
+def strip_screening_format(title: str) -> str:
+    """
+    Remove screening format suffixes from movie titles.
+
+    Strips suffixes like ': VIP', ': IMAX', ': 3D', ': 4DX' etc.
+    These are screening formats, not part of the actual movie title.
+
+    Args:
+        title: Original movie title
+
+    Returns:
+        Title with screening format suffixes removed
+
+    Examples:
+        >>> strip_screening_format("Colors of Fire: VIP")
+        "Colors of Fire"
+        >>> strip_screening_format("Warlord: Olori Ogun")
+        "Warlord: Olori Ogun"  # Keeps meaningful subtitles
+        >>> strip_screening_format("Mufasa: IMAX 3D")
+        "Mufasa"
+    """
+    # Common screening formats to strip
+    # Use word boundaries to avoid stripping from actual subtitles
+    # IMPORTANT: Order matters! Check combined formats before individual ones
+    screening_formats = [
+        r":\s*IMAX\s+3D\b",  # Check "IMAX 3D" before "IMAX" or "3D"
+        r":\s*4DX\s+3D\b",  # Check "4DX 3D" before "4DX" or "3D"
+        r":\s*VIP\b",
+        r":\s*IMAX\b",
+        r":\s*3D\b",
+        r":\s*4DX\b",
+    ]
+
+    cleaned = title
+    for pattern in screening_formats:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
+
+    # Clean up any trailing whitespace
+    cleaned = cleaned.strip()
+
+    if cleaned != title:
+        logger.debug(f"Stripped format suffix: '{title}' → '{cleaned}'")
+
+    return cleaned
 
 
 class MovieNormalizer:
-    def __init__(
-        self, tmdb_api_key: str | None = None, omdb_api_key: str | None = None
-    ):
-        if tmdb_api_key:
-            tmdb.API_KEY = tmdb_api_key
+    def __init__(self):
+        pass
 
-        self.omdb_api_key = omdb_api_key or OMDB_API_KEY
+    def search_imdb(self, title: str, year: int | None = None) -> dict | None:
+        """
+        Search IMDB Dev API for movie and return best match.
 
-    def search_tmdb(self, title: str, year: int | None = None) -> dict | None:
-        if not tmdb.API_KEY:
-            logger.debug("TMDB_API_KEY not set, skipping TMDB search")
-            return None
+        Uses title similarity and year matching to score results.
 
+        Args:
+            title: Movie title to search for
+            year: Optional release year for better matching
+
+        Returns:
+            Normalized movie dict or None if no good match found
+        """
         try:
-            search = tmdb.Search()
-
-            if year:
-                response = search.movie(query=title, year=year)
-            else:
-                response = search.movie(query=title)
-
-            if not response["results"]:
-                logger.debug(f"No TMDB results for '{title}'")
-                return None
-
-            # Get first result (best match)
-            movie_data = response["results"][0]
-
-            movie_id = movie_data["id"]
-            movie = tmdb.Movies(movie_id)
-            details = movie.info()
-
-            normalized = {
-                "source": "tmdb",
-                "tmdb_id": details["id"],
-                "imdb_id": details.get("imdb_id"),
-                "title": details["title"],
-                "description": details.get("overview"),
-                "release_year": (
-                    int(details["release_date"][:4])
-                    if details.get("release_date")
-                    else None
-                ),
-                "duration_minutes": details.get("runtime"),
-                "rating": details.get("vote_average"),
-                "poster_url": (
-                    f"https://image.tmdb.org/t/p/w500{details['poster_path']}"
-                    if details.get("poster_path")
-                    else None
-                ),
-                "backdrop_url": (
-                    f"https://image.tmdb.org/t/p/w1280{details['backdrop_path']}"
-                    if details.get("backdrop_path")
-                    else None
-                ),
-            }
-
-            logger.info(
-                f"[TMDB] Found match: '{title}' → '{normalized['title']}' "
-                f"({normalized['release_year']}, TMDB ID: {normalized['tmdb_id']})"
-            )
-
-            return normalized
-
-        except Exception as e:
-            logger.warning(f"TMDB search failed for '{title}': {type(e).__name__}: {e}")
-            return None
-
-    def search_omdb(self, title: str, year: int | None = None) -> dict | None:
-        if not self.omdb_api_key:
-            logger.debug("OMDB_API_KEY not set, skipping OMDb search")
-            return None
-
-        try:
-            params = {
-                "apikey": self.omdb_api_key,
-                "t": title,  # Search by title
-                "type": "movie",
-            }
-
-            if year:
-                params["y"] = year
-
+            query = f"{title} {year}" if year else title
+            params = {"query": query}
             response = requests.get(
-                "http://www.omdbapi.com/", params=params, timeout=10
+                "https://api.imdbapi.dev/search/titles",
+                params=params,
+                timeout=10,
             )
             response.raise_for_status()
             data = response.json()
 
-            if data.get("Response") == "False":
-                logger.debug(f"No OMDb results for '{title}': {data.get('Error')}")
+            titles = data.get("titles", [])
+            if not titles:
+                logger.debug(f"No IMDB results for '{title}'")
                 return None
 
-            # Extract and normalize data
+            # Filter to movies only
+            movies = [t for t in titles if t.get("type") == "movie"]
+            if not movies:
+                logger.debug(
+                    f"No movie results for '{title}' "
+                    f"(found {len(titles)} non-movie results)"
+                )
+                return None
+
+            best_match = movies[0]
+
+            # Extract data from best match
+            primary_image = best_match.get("primaryImage", {})
+            rating_data = best_match.get("rating", {})
+
             normalized = {
-                "source": "omdb",
+                "source": "imdb",
                 "tmdb_id": None,
-                "imdb_id": data.get("imdbID"),
-                "title": data.get("Title"),
-                "description": data.get("Plot") if data.get("Plot") != "N/A" else None,
+                "imdb_id": best_match.get("id"),
+                "title": best_match.get("primaryTitle"),
+                "description": None,  # Not available in search endpoint
                 "release_year": (
-                    int(data.get("Year")[:4])
-                    if data.get("Year") and data["Year"] != "N/A"
+                    int(best_match.get("startYear"))
+                    if best_match.get("startYear")
                     else None
                 ),
-                "duration_minutes": (
-                    int(data.get("Runtime").split()[0])
-                    if data.get("Runtime") and data["Runtime"] != "N/A"
-                    else None
-                ),
+                "duration_minutes": None,  # Not available in search endpoint
                 "rating": (
-                    float(data.get("imdbRating"))
-                    if data.get("imdbRating") and data["imdbRating"] != "N/A"
+                    float(rating_data.get("aggregateRating"))
+                    if rating_data and rating_data.get("aggregateRating")
                     else None
                 ),
-                "poster_url": (
-                    data.get("Poster") if data.get("Poster") != "N/A" else None
-                ),
-                "backdrop_url": None,
+                "poster_url": (primary_image.get("url") if primary_image else None),
             }
 
             logger.info(
-                f"[OMDb] Found match: '{title}' → '{normalized['title']}' "
+                f"[IMDB] Found match: '{title}' → '{normalized['title']}' "
                 f"({normalized['release_year']}, IMDB ID: {normalized['imdb_id']})"
             )
 
             return normalized
 
         except Exception as e:
-            logger.warning(f"OMDb search failed for '{title}': {type(e).__name__}: {e}")
+            logger.warning(f"IMDB search failed for '{title}': {type(e).__name__}: {e}")
             return None
 
     def normalize_title(self, title: str, year: int | None = None) -> dict:
         """
-        Get normalized movie data with fallback chain: TMDB → OMDb → original title.
+        Get normalized movie data from IMDB Dev API.
 
         Args:
             title: Movie title from cinema scraper
@@ -157,29 +143,26 @@ class MovieNormalizer:
         Returns:
             Dict with movie data (normalized if found, original if not)
         """
-        # Try TMDB first (best data, free, 50 req/sec)
-        tmdb_data = self.search_tmdb(title, year)
-        if tmdb_data:
-            return tmdb_data
+        # Strip screening format suffixes before normalization
+        cleaned_title = strip_screening_format(title)
 
-        # Fallback to OMDb (IMDB data, 1000 req/day free)
-        logger.debug(f"TMDB not found for '{title}', trying OMDb...")
-        omdb_data = self.search_omdb(title, year)
-        if omdb_data:
-            return omdb_data
+        # Try IMDB Dev API
+        imdb_data = self.search_imdb(cleaned_title, year)
+        if imdb_data:
+            return imdb_data
 
-        logger.warning(f"No API match for '{title}', using original title")
+        # Fallback to cleaned title (not original with VIP/IMAX suffix)
+        logger.warning(f"No IMDB match for '{cleaned_title}', using cleaned title")
         return {
             "source": "original",
             "tmdb_id": None,
             "imdb_id": None,
-            "title": title,
+            "title": cleaned_title,
             "description": None,
             "release_year": year,
             "duration_minutes": None,
             "rating": None,
             "poster_url": None,
-            "backdrop_url": None,
         }
 
 
@@ -188,10 +171,10 @@ _movie_cache: dict[str, dict] = {}
 
 def get_normalized_movie(title: str, year: int | None = None) -> dict:
     """
-    Get normalized movie data from TMDB/OMDb APIs with session caching.
+    Get normalized movie data from IMDB Dev API with session caching.
 
     Cache prevents hitting the API multiple times for the same movie in a single scrape.
-    Example: If 5 cinemas show "Mufasa", we only call TMDB once.
+    Example: If 5 cinemas show "Mufasa", we only call IMDB once.
 
     Args:
         title: Movie title from cinema scraper
@@ -200,14 +183,16 @@ def get_normalized_movie(title: str, year: int | None = None) -> dict:
     Returns:
         Dict with normalized movie data
     """
-    cache_key = f"{title.lower().strip()}:{year}"
+    # Clean title before caching to ensure "Movie: VIP" and "Movie" use same cache
+    cleaned_title = strip_screening_format(title)
+    cache_key = f"{cleaned_title.lower().strip()}:{year}"
 
     if cache_key in _movie_cache:
-        logger.debug(f"Cache hit for '{title}'")
+        logger.debug(f"Session cache hit for '{cleaned_title}'")
         return _movie_cache[cache_key]
 
     normalizer = MovieNormalizer()
-    movie_data = normalizer.normalize_title(title, year)
+    movie_data = normalizer.normalize_title(cleaned_title, year)
 
     _movie_cache[cache_key] = movie_data
 
