@@ -65,3 +65,27 @@ class TestParseTimeToDatetime:
         test_date = date(2024, 1, 15)
         result = parse_time_to_datetime("", test_date)
         assert result is None
+
+    def test_parse_typo_ppm(self):
+        """Test parsing time with PPM typo (should be PM)."""
+        test_date = date(2024, 1, 15)
+        result = parse_time_to_datetime("3:20PPM", test_date)
+        assert result == datetime(2024, 1, 15, 15, 20)
+
+    def test_parse_typo_aam(self):
+        """Test parsing time with AAM typo (should be AM)."""
+        test_date = date(2024, 1, 15)
+        result = parse_time_to_datetime("10:30AAM", test_date)
+        assert result == datetime(2024, 1, 15, 10, 30)
+
+    def test_parse_typo_ppm_uppercase(self):
+        """Test parsing time with uppercase PPM typo."""
+        test_date = date(2024, 1, 15)
+        result = parse_time_to_datetime("3:20PPM", test_date)
+        assert result == datetime(2024, 1, 15, 15, 20)
+
+    def test_parse_typo_with_spaces(self):
+        """Test parsing time with PPM typo and spaces."""
+        test_date = date(2024, 1, 15)
+        result = parse_time_to_datetime("3:20 PPM", test_date)
+        assert result == datetime(2024, 1, 15, 15, 20)

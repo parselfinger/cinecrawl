@@ -5,7 +5,7 @@ import os
 
 from dotenv import load_dotenv
 
-from db import cleanup_old_showtimes, save_showtimes_to_db
+from db import save_showtimes_to_db
 from logging_config import get_logger, setup_logging
 from models import CinemaResult
 from movie_cache import MovieCache, set_global_cache
@@ -133,11 +133,9 @@ async def main():
         db_stats = save_showtimes_to_db(unique_showtimes, database_url, cache)
 
         logger.info(
-            f"Database stats: {db_stats['inserted']} new, "
-            f"{db_stats['duplicates']} duplicates, {db_stats['errors']} errors"
+            f"Database stats: {db_stats['inserted']} inserted, "
+            f"{db_stats['deleted']} deleted, {db_stats['errors']} errors"
         )
-
-        cleanup_old_showtimes(database_url, days_old=7)
 
     else:
         logger.warning("DATABASE_URL not set, skipping database save")

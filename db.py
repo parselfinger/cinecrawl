@@ -1,5 +1,3 @@
-from datetime import datetime, timedelta
-
 import psycopg2
 
 from logging_config import get_logger
@@ -144,7 +142,12 @@ def save_showtimes_to_db(
     cache=None,
 ) -> dict:
     """
-    Save showtimes to database using direct SQL.
+    Save showtimes to database using bulk insert after clearing existing data.
+
+    Strategy:
+    1. Resolve all movie_ids and cinema_ids
+    2. Delete all existing showtimes
+    3. Bulk insert all new showtimes in a single operation
 
     Args:
         showtimes: List of Showtime dataclass objects
@@ -152,12 +155,14 @@ def save_showtimes_to_db(
         cache: Optional MovieCache instance for fuzzy matching
 
     Returns:
-        Dict with stats: inserted, duplicates, errors
+        Dict with stats: inserted, errors, deleted
     """
     conn = get_connection(database_url)
-    stats = {"inserted": 0, "duplicates": 0, "errors": 0}
+    stats = {"inserted": 0, "errors": 0, "deleted": 0}
 
     try:
+        # Step 1: Resolve all movie_ids and cinema_ids
+        showtime_records = []
         for showtime in showtimes:
             try:
                 movie_id = get_or_create_movie(
@@ -168,61 +173,47 @@ def save_showtimes_to_db(
                     conn, showtime.cinema, showtime.location
                 )
 
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO showtimes (movie_id, cinema_id, start_time,
-                        screen_type)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        (movie_id, cinema_id, showtime.date, showtime.screen_type),
-                    )
-
-                conn.commit()
-                stats["inserted"] += 1
-
-            except psycopg2.IntegrityError:
-                conn.rollback()
-                stats["duplicates"] += 1
-                logger.debug(
-                    f"Duplicate/constraint: {showtime.cinema} - "
-                    f"{showtime.title} at {showtime.date}"
+                showtime_records.append(
+                    (movie_id, cinema_id, showtime.date, showtime.screen_type)
                 )
 
             except Exception as e:
-                conn.rollback()
                 stats["errors"] += 1
                 logger.error(
-                    f"Error saving showtime: {type(e).__name__}: {e}\n"
+                    f"Error resolving showtime: {type(e).__name__}: {e}\n"
                     f"  Cinema: {showtime.cinema}, Title: {showtime.title}"
                 )
 
+        # Step 2: Delete all existing showtimes
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM showtimes")
+            stats["deleted"] = cur.rowcount
+            logger.info(f"Deleted {stats['deleted']} existing showtimes")
+
+        # Step 3: Bulk insert all new showtimes
+        if showtime_records:
+            with conn.cursor() as cur:
+                cur.executemany(
+                    """
+                    INSERT INTO showtimes (movie_id, cinema_id, start_time, screen_type)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    showtime_records,
+                )
+                stats["inserted"] = len(showtime_records)
+
+        conn.commit()
         logger.info(
             f"Database save complete: {stats['inserted']} inserted, "
-            f"{stats['duplicates']} duplicates, {stats['errors']} errors"
+            f"{stats['deleted']} deleted, {stats['errors']} errors"
         )
+
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Transaction failed: {type(e).__name__}: {e}")
+        raise
 
     finally:
         conn.close()
 
     return stats
-
-
-def cleanup_old_showtimes(database_url: str, days_old: int = 1) -> int:
-    conn = get_connection(database_url)
-    try:
-        cutoff_date = datetime.now() - timedelta(days=days_old)
-
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM showtimes WHERE start_time < %s",
-                (cutoff_date,),
-            )
-            deleted = cur.rowcount
-
-        conn.commit()
-        logger.info(f"Deleted {deleted} old showtimes (older than {days_old} days)")
-        return deleted
-
-    finally:
-        conn.close()
