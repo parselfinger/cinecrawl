@@ -37,6 +37,8 @@ class FilmworldProvider(BaseProvider):
                 continue
             title = title_elem.get_text(strip=True)
 
+            movie_url = title_elem.find("a")["href"]
+
             # Extract year from release date custom field
             year = None
             release_date_div = item.find(
@@ -133,6 +135,7 @@ class FilmworldProvider(BaseProvider):
                                 title=title,
                                 date=showtime_dt,
                                 time=time_text,
+                                movie_url=movie_url,
                                 year=year,
                             )
                         )

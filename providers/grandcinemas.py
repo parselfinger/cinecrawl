@@ -69,29 +69,16 @@ class GrandCinemasProvider(BaseProvider):
                 title_elem = tab.find("h3", class_="no-underline")
                 if not title_elem:
                     continue
-                title_link = title_elem.find("a")
-                if title_link:
-                    title = " ".join(title_link.get_text().split())
-                else:
-                    title = None
-                if not title:
-                    continue
+                title = title_elem.get_text(strip=True)
+
+                synopsis_link = tab.find("a", class_="arrow-button")
+                detail_url = synopsis_link.get("href")
 
                 cache_key = title.lower().strip()
                 if cache_key in year_cache:
                     year = year_cache[cache_key]
                     logger.debug(f"Cache hit for '{title}': year={year}")
                 else:
-                    # Find the "Full synopsis" link, fallback to title link
-                    synopsis_link = tab.find("a", id="tempsynoplink")
-                    if synopsis_link:
-                        detail_url = synopsis_link.get("href")
-                    elif title_link:
-                        detail_url = title_link.get("href")
-                    else:
-                        detail_url = None
-
-                    # Fetch year from detail page
                     year = None
                     if detail_url:
                         try:
@@ -171,6 +158,7 @@ class GrandCinemasProvider(BaseProvider):
                                         time=time_text,
                                         date=showtime_dt,
                                         year=year,
+                                        movie_url=detail_url,
                                     )
                                 )
 

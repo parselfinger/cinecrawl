@@ -20,6 +20,7 @@ class FusionIntelProvider(BaseProvider):
     - cinema_name: Name of the cinema
     - location: Location of the cinema
     - token_env_var: Environment variable name for the bearer token
+    - base_movie_url: Base Movie URL
 
     Optionally override:
     - cinema_id: Cinema ID parameter (defaults to None)
@@ -53,6 +54,11 @@ class FusionIntelProvider(BaseProvider):
         """
         return None
 
+    @property
+    @abstractmethod
+    def base_movie_url(self) -> str:
+        pass
+
     async def fetch(self) -> list[Showtime]:
         """
         Fetch showtimes from FusionIntel API.
@@ -72,5 +78,6 @@ class FusionIntelProvider(BaseProvider):
             location_name=self.location,
             bearer_token=token,
             cinema_id=self.cinema_id,
+            base_movie_url=self.base_movie_url,
             num_days=5,
         )

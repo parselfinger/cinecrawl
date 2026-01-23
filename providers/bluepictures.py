@@ -67,6 +67,15 @@ class BluePicturesProvider(BaseProvider):
                     continue
                 title = " ".join(title_elem.get_text().split())
 
+                movie_link = item.find("a", href=True)
+                if not movie_link:
+                    logger.warning(f"Skipping '{title}': no movie detail link found")
+                    continue
+
+                movie_url = movie_link["href"]
+                if not movie_url.startswith("http"):
+                    movie_url = f"https://bluepicturesng.com{movie_url}"
+
                 # Try to get year from global cache first (avoids HTTP request)
                 year = None
                 if global_cache:
@@ -77,17 +86,6 @@ class BluePicturesProvider(BaseProvider):
 
                 # If not in cache, fetch from detail page
                 if year is None:
-                    movie_link = item.find("a", href=True)
-                    if not movie_link:
-                        logger.warning(
-                            f"Skipping '{title}': no movie detail link found"
-                        )
-                        continue
-
-                    movie_url = movie_link["href"]
-                    if not movie_url.startswith("http"):
-                        movie_url = f"https://bluepicturesng.com{movie_url}"
-
                     try:
                         detail_response = await client.get(movie_url, headers=headers)
                         detail_response.raise_for_status()
@@ -155,6 +153,7 @@ class BluePicturesProvider(BaseProvider):
                             title=title,
                             time=time,
                             date=showtime_dt,
+                            movie_url=movie_url,
                             year=year,
                         )
                     )

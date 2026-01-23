@@ -10,6 +10,7 @@ class Showtime:
     time: str
     date: datetime
     year: int
+    movie_url: str
     screen_type: str = "2D"
 
 

@@ -69,6 +69,7 @@ class MagnificentProvider(BaseProvider):
                         time=time,
                         date=showtime_dt,
                         year=year,
+                        movie_url="https://magnificentcinemas.com",
                     )
                 )
 

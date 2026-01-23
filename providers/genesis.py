@@ -102,6 +102,8 @@ async def _fetch_genesis_showtimes(
                 if not title:
                     continue
 
+                movie_url = title_link.get("href")
+
                 year = None
 
                 global_cache = get_global_cache()
@@ -205,6 +207,7 @@ async def _fetch_genesis_showtimes(
                                     title=title,
                                     time=time_text,
                                     date=showtime_dt,
+                                    movie_url=movie_url,
                                     year=year,
                                 )
                             )

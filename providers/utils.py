@@ -64,6 +64,7 @@ async def fetch_fusionintel_showtimes(
     cinema_name: str,
     location_name: str,
     bearer_token: str,
+    base_movie_url: str,
     cinema_id: str | None = None,
     num_days: int = 5,
 ) -> list[Showtime]:
@@ -75,6 +76,7 @@ async def fetch_fusionintel_showtimes(
         location_name: Location description (e.g., "Ikeja, Lagos")
         bearer_token: Bearer token for API authorization
         cinema_id: Optional cinema ID parameter (required for some cinemas like Viva)
+        base_movie_url: Base Movie URL
         num_days: Number of days to fetch showtimes for (default: 5)
 
     Returns:
@@ -118,6 +120,8 @@ async def fetch_fusionintel_showtimes(
 
                 release_date = film.get("releaseDate")
                 year = datetime.fromisoformat(release_date.replace("Z", "+00:00")).year
+                film_id = film.get("id")
+                movie_url = base_movie_url + film_id
 
                 for showtime in film_showtimes:
                     start_time_str = showtime.get("startTime")
@@ -148,6 +152,7 @@ async def fetch_fusionintel_showtimes(
                                 title=title,
                                 time=time_text,
                                 date=showtime_dt,
+                                movie_url=movie_url,
                                 year=year,
                             )
                         )

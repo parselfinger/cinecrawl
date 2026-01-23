@@ -174,7 +174,13 @@ def save_showtimes_to_db(
                 )
 
                 showtime_records.append(
-                    (movie_id, cinema_id, showtime.date, showtime.screen_type)
+                    (
+                        movie_id,
+                        cinema_id,
+                        showtime.date,
+                        showtime.screen_type,
+                        showtime.movie_url,
+                    )
                 )
 
             except Exception as e:
@@ -195,8 +201,9 @@ def save_showtimes_to_db(
             with conn.cursor() as cur:
                 cur.executemany(
                     """
-                    INSERT INTO showtimes (movie_id, cinema_id, start_time, screen_type)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO showtimes (movie_id, cinema_id, start_time,
+                    screen_type, movie_url)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
                     showtime_records,
                 )

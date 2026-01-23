@@ -253,6 +253,7 @@ async def _fetch_silverbird_showtimes(
                                 time=time,
                                 date=start_at,
                                 year=year,
+                                movie_url=movie_url,
                             )
                         )
 

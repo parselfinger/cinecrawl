@@ -27,6 +27,7 @@ from providers.genesis import (
     GenesisLekkiProvider,
     GenesisMarylandProvider,
 )
+from providers.grandcinemas import GrandCinemasProvider
 from providers.magnificent import MagnificentProvider
 from providers.ozonecinemas import OzoneCinemasProvider
 from providers.silverbird import SilverbirdGalleriaProvider, SilverbirdIkejaProvider
@@ -65,7 +66,7 @@ PROVIDERS: list[BaseProvider] = [
     GenesisMarylandProvider(),
     GenesisFestacProvider(),
     GenesisLekkiProvider(),
-    # GrandCinemasProvider(),
+    GrandCinemasProvider(),
     MagnificentProvider(),
     SilverbirdIkejaProvider(),
     SilverbirdGalleriaProvider(),

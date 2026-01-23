@@ -150,6 +150,14 @@ class FilmHouseProvider(BaseProvider):
 
                     year = movie.get("movie_year")
 
+                    url_key = movie.get("url_key")
+
+                    movie_url = (
+                        f"https://www.filmhouseng.com/movies/"
+                        f"{url_key}?location={self.location}&"
+                        f"locationKey={self.cinema_location_id}"
+                    )
+
                     show_times = movie.get("show_times", [])
                     for show_time in show_times:
                         time_slot = show_time.get("show_time_slots")
@@ -186,6 +194,7 @@ class FilmHouseProvider(BaseProvider):
                                     title=title,
                                     time=time_text,
                                     date=showtime_dt,
+                                    movie_url=movie_url,
                                     year=year,
                                     screen_type=theater_experience,
                                 )
@@ -198,7 +207,7 @@ class FilmHouseLandmarkProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Landmark."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Landmark, Lagos"
+    location = "landmark"
     cinema_location_id = "5"
 
 
@@ -206,7 +215,7 @@ class FilmHouseLekkiIMAXProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Lekki IMAX."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Lekki IMAX"
+    location = "lekki"
     cinema_location_id = "6"
 
 
@@ -214,7 +223,7 @@ class FilmHouseOniruProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Oniru."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Oniru"
+    location = "oniru"
     cinema_location_id = "10"
 
 
@@ -222,7 +231,7 @@ class FilmHousePalmsLekkiProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Palms Lekki."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Palms Lekki"
+    location = "palmslekki"
     cinema_location_id = "11"
 
 
@@ -230,7 +239,7 @@ class FilmHouseSurulereProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Surulere."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Surulere"
+    location = "surulere"
     cinema_location_id = "7"
 
 
@@ -238,7 +247,7 @@ class FilmHouseCircleMallProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Circle Mall."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Circle Mall"
+    location = "circlemall"
     cinema_location_id = "8"
 
 
@@ -246,5 +255,5 @@ class FilmHouseIkotaProvider(FilmHouseProvider):
     """Provider for FilmHouse Cinemas Ikota."""
 
     cinema_name = "FilmHouse Cinemas"
-    location = "Ikota"
+    location = "ikota"
     cinema_location_id = "9"
