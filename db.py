@@ -66,8 +66,8 @@ def get_or_create_movie(conn, title: str, year: int, cache=None) -> int:
         cur.execute(
             """
             INSERT INTO movies (title, description, release_year, duration_minutes,
-            rating, poster_url)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            rating, poster_url, imdb_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -77,6 +77,7 @@ def get_or_create_movie(conn, title: str, year: int, cache=None) -> int:
                 movie_data.get("duration_minutes"),
                 movie_data.get("rating"),
                 movie_data.get("poster_url"),
+                movie_data.get("imdb_id"),
             ),
         )
 
