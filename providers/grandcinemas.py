@@ -1,5 +1,6 @@
 """Grand Cinemas provider."""
 
+import re
 from datetime import datetime, timedelta
 
 import httpx
@@ -93,19 +94,43 @@ class GrandCinemasProvider(BaseProvider):
                                 for li in movie_info.find_all("li"):
                                     text = li.get_text(strip=True)
                                     if text.startswith("Released"):
-                                        # Extract date from "Released 2025-12-12"
+                                        # Extract date from various formats:
+                                        # "Released 2025-12-12"
+                                        # "Released January 23, 2026"
+                                        # "Released December 19th, 2025"
                                         date_str = text.replace("Released", "").strip()
-                                        try:
-                                            parsed_date = datetime.strptime(
-                                                date_str, "%Y-%m-%d"
-                                            )
-                                            year = parsed_date.year
-                                            logger.debug(
-                                                f"Extracted year {year} from detail "
-                                                f"page for '{title}'"
-                                            )
+
+                                        # Remove ordinal suffixes (st, nd, rd, th)
+                                        date_str_cleaned = re.sub(
+                                            r"(\d+)(st|nd|rd|th)", r"\1", date_str
+                                        )
+
+                                        # Try multiple date formats
+                                        formats = [
+                                            "%Y-%m-%d",  # 2025-12-12
+                                            "%B %d, %Y",  # January 23, 2026
+                                            "%b %d, %Y",  # Jan 23, 2026
+                                        ]
+
+                                        parsed = False
+                                        for fmt in formats:
+                                            try:
+                                                parsed_date = datetime.strptime(
+                                                    date_str_cleaned, fmt
+                                                )
+                                                year = parsed_date.year
+                                                logger.debug(
+                                                    f"Extracted year {year} from"
+                                                    f"detail page for '{title}'"
+                                                )
+                                                parsed = True
+                                                break
+                                            except ValueError:
+                                                continue
+
+                                        if parsed:
                                             break
-                                        except ValueError:
+                                        else:
                                             logger.warning(
                                                 f"Could not parse release date "
                                                 f"'{date_str}' for '{title}'"
