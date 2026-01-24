@@ -1,6 +1,7 @@
 """Shared utilities for cinema providers."""
 
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -9,6 +10,8 @@ from models import Showtime
 from retry import async_retry
 
 logger = get_logger(__name__)
+
+LAGOS_TZ = ZoneInfo("Africa/Lagos")
 
 
 def parse_time_to_datetime(

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from logging_config import get_logger
 from models import Showtime
+from providers.utils import LAGOS_TZ
 
 logger = get_logger(__name__)
 
@@ -27,7 +28,7 @@ def validate_showtime(showtime: Showtime) -> bool:
         logger.warning(f"Invalid date type: {type(showtime.date)}")
         return False
 
-    now = datetime.now()
+    now = datetime.now(LAGOS_TZ)
     if showtime.date.date() < now.date():
         logger.debug(
             f"Showtime date is in the past: {showtime.date.date()} "
@@ -40,18 +41,28 @@ def validate_showtime(showtime: Showtime) -> bool:
 
 def validate_showtimes(showtimes: list[Showtime]) -> list[Showtime]:
     """
-    Filter and validate a list of showtimes.
+    Filter and validate a list of showtimes, normalizing all datetimes to (UTC+1).
 
     Args:
         showtimes: List of Showtime objects
 
     Returns:
-        List of valid Showtime objects
+        List of valid Showtime objects with timezone-normalized dates
     """
     valid_showtimes = []
     invalid_count = 0
 
     for showtime in showtimes:
+        # Normalize timezone: convert naive datetimes to Lagos timezone
+        # or convert timezone-aware datetimes from other zones to Lagos timezone
+        if isinstance(showtime.date, datetime):
+            if showtime.date.tzinfo is None:
+                # Naive datetime - assume it's in Lagos timezone
+                showtime.date = showtime.date.replace(tzinfo=LAGOS_TZ)
+            else:
+                # Timezone-aware datetime - convert to Lagos timezone
+                showtime.date = showtime.date.astimezone(LAGOS_TZ)
+
         if validate_showtime(showtime):
             valid_showtimes.append(showtime)
         else:
