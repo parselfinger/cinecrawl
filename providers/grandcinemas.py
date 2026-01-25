@@ -33,7 +33,7 @@ class GrandCinemasProvider(BaseProvider):
     """Provider for Grand Cinemas."""
 
     cinema_name = "Grand Cinemas"
-    location = "Jabi Lake Mall, Abuja"
+    location = "Lekki"
 
     @async_retry(max_attempts=3, backoff_factor=2.0)
     async def fetch(self) -> list[Showtime]:
