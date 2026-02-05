@@ -99,7 +99,7 @@ class FilmHouseProvider(BaseProvider):
         seen = set()
         today = datetime.now()
 
-        for day_offset in range(5):
+        for day_offset in range(8):
             target_date = today + timedelta(days=day_offset)
             date_str = target_date.strftime("%Y-%m-%d")
 
@@ -139,6 +139,7 @@ class FilmHouseProvider(BaseProvider):
                 json_response = response.json()
                 data = json_response.get("data", {})
                 movies = data.get("movies", [])
+                breakpoint()
 
                 if not movies:
                     continue
