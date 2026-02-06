@@ -1,5 +1,6 @@
 """In-memory movie cache with fuzzy matching for efficient movie lookups."""
 
+import psycopg2
 from rapidfuzz import fuzz
 
 from logging_config import get_logger
@@ -41,8 +42,6 @@ class MovieCache:
         Args:
             database_url: PostgreSQL connection string
         """
-        import psycopg2
-
         conn = psycopg2.connect(database_url)
         try:
             with conn.cursor() as cur:

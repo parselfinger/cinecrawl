@@ -18,6 +18,8 @@ class Movie(Base):
     release_year = Column(Integer, nullable=True)
     duration_minutes = Column(Integer, nullable=True)
     rating = Column(Float, nullable=True)
+    rotten_tomatoes_rating = Column(Integer, nullable=True)
+    metacritic_rating = Column(Integer, nullable=True)
     poster_url = Column(String(2048), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

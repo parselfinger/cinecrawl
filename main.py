@@ -1,7 +1,6 @@
-"""Main scraper script with direct PostgreSQL access and TMDB normalization."""
-
 import asyncio
 import os
+import sys
 
 from dotenv import load_dotenv
 
@@ -9,6 +8,7 @@ from db import save_showtimes_to_db
 from logging_config import get_logger, setup_logging
 from models import CinemaResult
 from movie_cache import MovieCache, set_global_cache
+from omdb_enricher import enrich_movies
 from providers.base import BaseProvider
 from providers.bluepictures import BluePicturesProvider
 from providers.ebonylife import EbonyLifeProvider
@@ -137,7 +137,6 @@ async def main():
             f"Database stats: {db_stats['inserted']} inserted, "
             f"{db_stats['deleted']} deleted, {db_stats['errors']} errors"
         )
-
     else:
         logger.warning("DATABASE_URL not set, skipping database save")
 
@@ -154,26 +153,60 @@ async def main():
     return unique_showtimes
 
 
-def lambda_handler(event, context):
-    """
-    AWS Lambda handler function.
+# --- Lambda handlers (single Lambda, event-driven) ---
 
-    This function is called by AWS Lambda when triggered by EventBridge.
-    """
-    logger.info("Lambda function started")
-    logger.info(f"Event: {event}")
+ACTIONS = {
+    "scrape": lambda: _handle_scrape(),
+    "enrich": lambda: _handle_enrich(),
+}
 
-    # Run the async main function
+
+def _handle_scrape() -> dict:
+    """Run showtime scrape."""
     showtimes = asyncio.run(main())
+    return {
+        "statusCode": 200,
+        "body": {"message": "Scrape complete", "showtimes_count": len(showtimes)},
+    }
 
+
+def _handle_enrich() -> dict:
+    """Run OMDB enrichment."""
+    database_url = os.getenv("DATABASE_URL")
+    api_key = os.getenv("OMDB_API_KEY")
+
+    if not database_url:
+        return {"statusCode": 500, "body": {"error": "DATABASE_URL not configured"}}
+    if not api_key:
+        return {"statusCode": 500, "body": {"error": "OMDB_API_KEY not configured"}}
+
+    stats = enrich_movies(database_url, api_key)
     return {
         "statusCode": 200,
         "body": {
-            "message": "Scrape complete",
-            "showtimes_count": len(showtimes),
+            "message": "Enrichment complete",
+            "enriched": stats["enriched"],
+            "skipped": stats["skipped"],
+            "errors": stats["errors"],
         },
     }
 
 
+def lambda_handler(event, context):
+    """
+    AWS Lambda handler. Routes by event["action"]:
+    - "enrich" -> OMDB enrichment
+    - "scrape" or default -> showtime scrape
+    """
+    action = (event or {}).get("action", "scrape")
+    handler = ACTIONS.get(action, _handle_scrape)
+    logger.info(f"Lambda invoked: action={action}")
+    return handler()
+
+
 if __name__ == "__main__":
-    showtimes = asyncio.run(main())
+    action = sys.argv[1] if len(sys.argv) > 1 else "scrape"
+    handler = ACTIONS.get(action, _handle_scrape)
+    result = handler()
+    if action != "scrape":
+        print(result)
