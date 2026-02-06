@@ -6,13 +6,16 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "aiohttp>=3.13.1",
+    "alembic>=1.13.0",
     "bs4>=0.0.2",
     "httpx>=0.28.1",
     "psycopg2-binary>=2.9.9",
+    "pycryptodome>=3.21.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=0.23.0",
     "python-dotenv>=1.2.1",
     "rapidfuzz>=3.14.3",
+    "sqlalchemy>=2.0.0",
     "requests>=2.32.5",
 ]
 
