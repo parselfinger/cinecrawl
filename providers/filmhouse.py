@@ -139,7 +139,6 @@ class FilmHouseProvider(BaseProvider):
                 json_response = response.json()
                 data = json_response.get("data", {})
                 movies = data.get("movies", [])
-                breakpoint()
 
                 if not movies:
                     continue
