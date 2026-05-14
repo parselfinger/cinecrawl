@@ -80,7 +80,6 @@ jobs:
 
           aws lambda update-function-configuration \
             --function-name $LAMBDA_FUNCTION_NAME \
-            --handler main.lambda_handler \
             --memory-size 1024 \
             --timeout 900
 
