@@ -1,6 +1,7 @@
 """Shared utilities for cinema providers."""
 
 from datetime import date, datetime, timedelta
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -12,6 +13,14 @@ from retry import async_retry
 logger = get_logger(__name__)
 
 LAGOS_TZ = ZoneInfo("Africa/Lagos")
+
+# Sent on FusionIntel requests so the WAF/Cloudflare layer doesn't 403
+# requests coming from non-residential IPs (e.g. AWS Lambda egress).
+_BROWSER_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
 
 
 def parse_time_to_datetime(
@@ -99,8 +108,16 @@ async def fetch_fusionintel_showtimes(
         if cinema_id:
             params["cinemaId"] = cinema_id
 
+        site_origin = (
+            f"{urlsplit(base_movie_url).scheme}://{urlsplit(base_movie_url).netloc}"
+        )
         headers = {
             "Authorization": f"Bearer {bearer_token}",
+            "User-Agent": _BROWSER_UA,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Origin": site_origin,
+            "Referer": f"{site_origin}/",
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
